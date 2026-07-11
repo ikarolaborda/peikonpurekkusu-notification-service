@@ -1,5 +1,5 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
 import mikroOrmConfig from '../mikro-orm.config.js';
@@ -10,6 +10,7 @@ import {
   PushTransport,
   SmsTransport,
 } from './channels/channel.strategy.js';
+import { GatewayAuthMiddleware } from './auth/gateway-auth.middleware.js';
 import { validateEnv } from './config/env.validation.js';
 import { NotificationConsumer } from './consumers/notification.consumer.js';
 import { ContractValidator } from './messaging/contract-validator.js';
@@ -42,4 +43,10 @@ import { TemplateRegistry } from './templating/templates.js';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    // Every /notifications route carries user data and must prove a verified
+    // identity; /health stays open.
+    consumer.apply(GatewayAuthMiddleware).forRoutes('notifications');
+  }
+}

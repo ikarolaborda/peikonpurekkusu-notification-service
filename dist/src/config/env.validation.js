@@ -21,6 +21,7 @@ class Env {
     NOTIFICATION_DB_NAME;
     KAFKA_BOOTSTRAP_SERVERS = 'kafka:19092';
     SCHEMA_REGISTRY_URL = 'http://apicurio-registry:8080/apis/ccompat/v7';
+    GATEWAY_JWKS_URL = 'http://user-service:8080/.well-known/jwks.json';
 }
 exports.Env = Env;
 __decorate([
@@ -52,6 +53,10 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], Env.prototype, "SCHEMA_REGISTRY_URL", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], Env.prototype, "GATEWAY_JWKS_URL", void 0);
 function validateEnv(raw) {
     const env = (0, class_transformer_1.plainToInstance)(Env, raw, { enableImplicitConversion: true, exposeDefaultValues: true });
     const errors = (0, class_validator_1.validateSync)(env, { whitelist: true });

@@ -10,6 +10,8 @@ export class Env {
 
   @IsString() KAFKA_BOOTSTRAP_SERVERS: string = 'kafka:19092';
   @IsString() SCHEMA_REGISTRY_URL: string = 'http://apicurio-registry:8080/apis/ccompat/v7';
+
+  @IsString() GATEWAY_JWKS_URL: string = 'http://user-service:8080/.well-known/jwks.json';
 }
 
 export function validateEnv(raw: Record<string, unknown>): Env {

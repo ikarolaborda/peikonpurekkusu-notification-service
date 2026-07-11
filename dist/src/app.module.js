@@ -16,6 +16,7 @@ const config_1 = require("@nestjs/config");
 const terminus_1 = require("@nestjs/terminus");
 const mikro_orm_config_js_1 = __importDefault(require("../mikro-orm.config.js"));
 const channel_strategy_js_1 = require("./channels/channel.strategy.js");
+const gateway_auth_middleware_js_1 = require("./auth/gateway-auth.middleware.js");
 const env_validation_js_1 = require("./config/env.validation.js");
 const notification_consumer_js_1 = require("./consumers/notification.consumer.js");
 const contract_validator_js_1 = require("./messaging/contract-validator.js");
@@ -29,6 +30,9 @@ const notifications_controller_js_1 = require("./notifications/notifications.con
 const sse_hub_service_js_1 = require("./notifications/sse-hub.service.js");
 const templates_js_1 = require("./templating/templates.js");
 let AppModule = class AppModule {
+    configure(consumer) {
+        consumer.apply(gateway_auth_middleware_js_1.GatewayAuthMiddleware).forRoutes('notifications');
+    }
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
