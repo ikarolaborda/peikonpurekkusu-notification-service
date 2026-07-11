@@ -7,7 +7,13 @@ import { Notification } from '../entities/notification.entity.js';
 import { CHANNEL_STRATEGIES, type ChannelStrategy } from '../channels/channel.strategy.js';
 import { SseHub, type LiveNotification } from '../notifications/sse-hub.service.js';
 import { TemplateRegistry } from '../templating/templates.js';
-import { unframe } from '../messaging/wire.js';
+import { parseFrame, toEnvelope, type DecodedEnvelope } from '../messaging/wire.js';
+import {
+  ContractValidator,
+  ContractViolationError,
+  RegistryUnavailableError,
+  UnknownSchemaError,
+} from '../messaging/contract-validator.js';
 
 const GROUP = 'notification-service';
 
@@ -54,6 +60,7 @@ export class NotificationConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly orm: MikroORM,
     private readonly templates: TemplateRegistry,
     private readonly hub: SseHub,
+    private readonly validator: ContractValidator,
     @Inject(CHANNEL_STRATEGIES) private readonly channels: ChannelStrategy[],
     config: ConfigService,
   ) {
@@ -105,15 +112,31 @@ export class NotificationConsumer implements OnModuleInit, OnModuleDestroy {
     while (true) {
       attempt += 1;
       try {
-        const env = unframe(message.value as Buffer);
+        const frame = parseFrame(message.value as Buffer);
+        // Validate against the exact schema the producer framed with, BEFORE
+        // any field is read — a drifted payload must never be rendered to a
+        // user or silently skipped.
+        await this.validator.validate(frame.schema_id, frame.doc);
+        const env = toEnvelope(frame.doc);
         await this.process(env, route);
         await this.consumer.commitOffsets([
           { topic, partition, offset: (Number(message.offset) + 1).toString() },
         ]);
         return;
       } catch (err) {
+        if (err instanceof RegistryUnavailableError) {
+          // Not poison and not skippable: returning would let later commits
+          // advance past an unvalidated event. Hold the message and retry —
+          // librdkafka heartbeats in the background, and an outage longer than
+          // max.poll.interval.ms just means uncommitted replay (idempotent).
+          this.logger.warn(`schema registry unavailable — holding ${topic}@${message.offset}`);
+          attempt = 0;
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        const poison = err instanceof ContractViolationError || err instanceof UnknownSchemaError;
         this.logger.warn(`handle failed (attempt ${attempt}): ${(err as Error).message}`);
-        if (attempt >= 3) {
+        if (poison || attempt >= 3) {
           const deadLettered = await this.deadLetter(topic, partition, message, err as Error);
           // Commit only once the message is durably parked in the DLQ. Committing
           // after a failed DLQ write would advance past an event stored nowhere.
@@ -131,9 +154,13 @@ export class NotificationConsumer implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async process(env: ReturnType<typeof unframe>, route: (typeof ROUTES)[string]): Promise<void> {
-    const userId = String(env.payload.user_id ?? '');
-    if (!userId) return;
+  private async process(env: DecodedEnvelope, route: (typeof ROUTES)[string]): Promise<void> {
+    // Validation guarantees user_id (schema-required on every routed topic);
+    // the throw is the backstop that keeps a bypass from silently skipping.
+    const userId = env.payload.user_id;
+    if (typeof userId !== 'string' || !userId) {
+      throw new ContractViolationError("payload missing 'user_id'");
+    }
     const rendered = this.templates.render(route.template, route.map(env.payload));
 
     let toPublish: LiveNotification | null = null;

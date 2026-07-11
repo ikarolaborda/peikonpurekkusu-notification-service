@@ -12,6 +12,7 @@ import {
 } from './channels/channel.strategy.js';
 import { validateEnv } from './config/env.validation.js';
 import { NotificationConsumer } from './consumers/notification.consumer.js';
+import { ContractValidator } from './messaging/contract-validator.js';
 import { DeliveryAttempt } from './entities/delivery-attempt.entity.js';
 import { DevInboxItem } from './entities/dev-inbox.entity.js';
 import { Notification } from './entities/notification.entity.js';
@@ -33,6 +34,7 @@ import { TemplateRegistry } from './templating/templates.js';
   providers: [
     TemplateRegistry,
     SseHub,
+    ContractValidator,
     NotificationConsumer,
     {
       provide: CHANNEL_STRATEGIES,
